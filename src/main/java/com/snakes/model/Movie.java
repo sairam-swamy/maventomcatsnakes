@@ -1,4 +1,5 @@
 package com.snakes.model;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.lang.NullPointerException;
@@ -77,7 +78,7 @@ public class Movie extends Media {
       con = getConnection();
       // If that fails, send dummy entries
       if (con == null) {
-      logger.warn("Connection Failed!");
+        logger.warn("Connection Failed!");
         Movie failed = new Movie("Connection Failed", 99999999, false);
         return new Movie[] { failed };
       }
@@ -107,7 +108,7 @@ public class Movie extends Media {
       con = getConnection();
       // If that fails, send dummy entry
       if (con == null) {
-      logger.warn("Connection Failed!");
+        logger.warn("Connection Failed!");
         Movie failed = new Movie("Connection Failed", 99999999, false);
         return new Movie[] { failed };
       }
@@ -141,7 +142,7 @@ public class Movie extends Media {
     }
     try {
       Statement create = con.createStatement();
-      String insertRow1 = "INSERT INTO Movies (Name, IMDB, Snakes) VALUES ('"+name+"', '"+imdb+"', '"+snakes+"');";
+      String insertRow1 = "INSERT INTO Movies (Name, IMDB, Snakes) VALUES ('"+name+"', '"+imdb+"', "+snakes+");";
       logger.trace("adding movie with statement: "+ insertRow1);
       create.addBatch(insertRow1);
       create.executeBatch();
@@ -167,33 +168,32 @@ public class Movie extends Media {
     catch (SQLException e) {
       try {
         logger.warn("Initializing Database");
-        // Create table
+        // Create table for MySQL
         logger.info("Creating table");
-        String createTable = "CREATE TABLE Movies (Name char(50), IMDB integer, Snakes boolean);";
+        String createTable = "CREATE TABLE IF NOT EXISTS Movies (Name VARCHAR(255), IMDB INT, Snakes BOOLEAN);";
         Statement createStmt = con.createStatement();
         createStmt.execute(createTable);
       }
       catch (SQLException f) { logger.warn(f.toString());}
-      /* Seed empty table with entries from database-seed.json at /tmp/database-seed.json
-      * Seed file is copied to /tmp during deployment by db-seed.config
-      * move db-seed.config to src/.ebextensions/inactive to disable
-      */ 
-      try{
-        // Read seed file
+
+      try {
+        // Read seed file if present
         logger.info("reading seed file");
         File databaseSeed = new File("/tmp/database-seed.json");
-        ObjectMapper mapper = new ObjectMapper();
-        Movie[] movies = mapper.readValue(databaseSeed, Movie[].class);
-        Statement create = con.createStatement();
-        logger.info("adding movies to batch");
-        for (Movie movie : movies) {
-          String row = "INSERT INTO Movies (Name, IMDB, Snakes) VALUES ('" + movie.getName() + "', '"+ movie.getImdb() + "', '" + movie.getSnakesBool() + "');";
-          logger.info("- "+row);  
-          create.addBatch(row);
+        if (databaseSeed.exists()) {
+          ObjectMapper mapper = new ObjectMapper();
+          Movie[] movies = mapper.readValue(databaseSeed, Movie[].class);
+          Statement create = con.createStatement();
+          logger.info("adding movies to batch");
+          for (Movie movie : movies) {
+            String row = "INSERT INTO Movies (Name, IMDB, Snakes) VALUES ('" + movie.getName() + "', '" + movie.getImdb() + "', " + movie.getSnakesBool() + ");";
+            logger.info("- "+row);  
+            create.addBatch(row);
+          }
+          create.executeBatch();
+          create.close();
+          logger.warn("Initialized Database");
         }
-        create.executeBatch();
-        create.close();
-        logger.warn("Initialized Database");
       }
       catch (IOException g) { logger.warn(g.toString());}
       catch (SQLException h) { logger.warn(h.toString());}
@@ -201,91 +201,77 @@ public class Movie extends Media {
   }
 
   private static Connection getConnection() {
-    // Return existing connection after first call
-    if (con != null) {
-      return con;
+    // Return existing connection if active
+    try {
+      if (con != null && !con.isClosed()) {
+        return con;
+      }
+    } catch (SQLException e) {
+      logger.warn(e.toString());
     }
+
     logger.trace("Getting database connection...");
-    // Get RDS connection from environment properties provided by Elastic Beanstalk
     con = getRemoteConnection();
-    // If that fails, attempt to connect to a local postgres server
+    
     if (con == null) {
       con = getLocalConnection();
     }
-    // If that fails, give up
+
     if (con == null) {
       return null;
     }
-    // Attempt to initialize the database on first connection
+
     initDatabase();
     return con;
   }
 
   private static Connection getRemoteConnection() {
-    /* Read database info from /tmp/database.json (advanced, more secure option)
-    * - Requires database.config to be moved into .ebextensions folder and updated to 
-    * point to a JSON file in an S3 bucket that the instance profile has permission to read.
-    */
     try {
-      /* Load the file and create a parser. If the project is not configured to store
-      * database credentials in S3, fail out and try the next method.
-      */
-      File databaseConfig = new File("/tmp/database.json");
-      JsonParser parser = factory.createParser(databaseConfig);
-      // Load the Postgresql driver class
-      Class.forName("org.postgresql.Driver");
-      /* Read the first value in the JSON document with Jackson. This must be a full JDBC
-      *  connection string a la jdbc:postgresql://hostname:port/dbName?user=userName&password=password
-      */
-      JsonToken jsonToken = null;
-      while ( jsonToken != JsonToken.VALUE_STRING ) 
-        jsonToken = parser.nextToken();
-      String jdbcUrl = parser.getValueAsString();
-      // Connect to the database
-      logger.trace("Getting remote connection with url from database config file.");
-      Connection con = DriverManager.getConnection(jdbcUrl);
-      logger.info("Remote connection successful.");
-      return con;
-    }
-    catch (IOException e) { logger.warn("Database configuration file not found. Checking environment variables.");}
-    catch (ClassNotFoundException e) { logger.warn(e.toString());}
-    catch (SQLException e) { logger.warn(e.toString());}
+      Class.forName("com.mysql.cj.jdbc.Driver");
 
-    // Read database info from environment variables (standard configration)
-    if (System.getProperty("RDS_HOSTNAME") != null) {
-      try {
-      Class.forName("org.postgresql.Driver");
-      String dbName = System.getProperty("RDS_DB_NAME");
-      String userName = System.getProperty("RDS_USERNAME");
-      String password = System.getProperty("RDS_PASSWORD");
-      String hostname = System.getProperty("RDS_HOSTNAME");
-      String port = System.getProperty("RDS_PORT");
-      String jdbcUrl = "jdbc:postgresql://" + hostname + ":" + port + "/" + dbName + "?user=" + userName + "&password=" + password;
-      logger.trace("Getting remote connection with connection string from environment variables.");
-      Connection con = DriverManager.getConnection(jdbcUrl);
-      logger.info("Remote connection successful.");
-      return con;
+      // Read values from system environment or system properties
+      String hostname = getEnv("MYSQL_HOST", getEnv("RDS_HOSTNAME", null));
+      String dbName   = getEnv("MYSQL_DATABASE", getEnv("RDS_DB_NAME", "ebdb"));
+      String userName = getEnv("MYSQL_USER", getEnv("RDS_USERNAME", null));
+      String password = getEnv("MYSQL_PASSWORD", getEnv("RDS_PASSWORD", null));
+      String port     = getEnv("MYSQL_PORT", getEnv("RDS_PORT", "3306"));
+
+      if (hostname != null && userName != null && password != null) {
+        String jdbcUrl = "jdbc:mysql://" + hostname + ":" + port + "/" + dbName + 
+                         "?useSSL=true&requireSSL=false&serverTimezone=UTC";
+        logger.trace("Connecting to MySQL at: " + hostname);
+        Connection con = DriverManager.getConnection(jdbcUrl, userName, password);
+        logger.info("MySQL Remote connection successful.");
+        return con;
+      }
     }
-    catch (ClassNotFoundException e) { logger.warn(e.toString());}
-    catch (SQLException e) { logger.warn(e.toString());}
-    }
+    catch (ClassNotFoundException e) { logger.warn("MySQL Driver not found: " + e.toString()); }
+    catch (SQLException e) { logger.warn("MySQL Connection error: " + e.toString()); }
+
     return null;
   }
 
-  // Connect to a local database for development purposes
   private static Connection getLocalConnection() {
     try {
-      Class.forName("org.postgresql.Driver");
-      logger.info("Getting local connection");
+      Class.forName("com.mysql.cj.jdbc.Driver");
+      logger.info("Getting local MySQL connection");
       Connection con = DriverManager.getConnection(
-            "jdbc:postgresql://localhost/snakes",
-            "snakes",
-            "sqlpassword");
-      logger.info("Local connection successful.");
+            "jdbc:mysql://localhost:3306/snakes?useSSL=false&serverTimezone=UTC",
+            "root",
+            "root");
+      logger.info("Local MySQL connection successful.");
       return con;
     }
-    catch (ClassNotFoundException e) { logger.warn(e.toString());}
-    catch (SQLException e) { logger.warn(e.toString());}
+    catch (ClassNotFoundException e) { logger.warn(e.toString()); }
+    catch (SQLException e) { logger.warn(e.toString()); }
     return null;
+  }
+
+  private static String getEnv(String name, String defaultValue) {
+    String val = System.getenv(name);
+    if (val == null) {
+      val = System.getProperty(name);
+    }
+    return (val != null) ? val : defaultValue;
   }
 }
