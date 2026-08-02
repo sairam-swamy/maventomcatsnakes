@@ -76,7 +76,7 @@ name: Build and Deploy Java Web App to Azure
 on:
   push:
     branches:
-      - master      # Change to 'main' if your primary branch name is main
+      - mavenbranch      # Change to 'main' if your primary branch name is main
   workflow_dispatch:
 
 jobs:
