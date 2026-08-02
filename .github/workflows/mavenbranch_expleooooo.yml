@@ -1,53 +1,116 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy WAR app to Azure Web App - expleooooo
+# name: Build and deploy WAR app to Azure Web App - expleooooo
+
+# on:
+#   push:
+#     branches:
+#       - master
+#   workflow_dispatch:
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read # Required for actions/checkout
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Set up Java version
+#         uses: actions/setup-java@v4
+#         with:
+#           java-version: '8'
+#           distribution: 'temurin' # Uses Temurin (Adoptium) which supports Java 8
+
+#       - name: Download missing log4j-core JAR
+#         run: |
+#           mkdir -p src/WEB-INF/lib
+#           curl -sS -o src/WEB-INF/lib/log4j-core-2.20.0.jar \
+#             https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core/2.20.0/log4j-core-2.20.0.jar
+
+#       - name: Build WAR File
+#         run: |
+#           chmod +x build.sh
+#           ./build.sh
+
+#       - name: Make build script executable and run it
+#         run: |
+#           chmod +x ./build.sh
+#           ./build.sh
+
+#       - name: Upload artifact for deployment job
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: java-app
+#           path: '${{ github.workspace }}/*.war' # Searches root directory where ROOT.war is generated
+#           if-no-files-found: error
+
+#   deploy:
+#     runs-on: ubuntu-latest
+#     needs: build
+    
+#     steps:
+#       - name: Download artifact from build job
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: java-app
+          
+#       - name: Prepare Deployment Zip
+#         run: |
+#           zip -r deploy.zip ROOT.war
+      
+#       - name: Deploy to Azure Web App
+#         id: deploy-to-webapp
+#         uses: azure/webapps-deploy@v3
+#         with:
+#           app-name: 'expleooooo'
+#           slot-name: 'Production'
+#           package: 'deploy.zip'
+#           target-path: 'webapps'
+#           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_407E13E2C9944DC99FACC404B2A51631 }}
+
+name: Build and Deploy Java Web App to Azure
 
 on:
   push:
     branches:
-      - mavenbranch
+      - master      # Change to 'main' if your primary branch name is main
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read #This is required for actions/checkout
 
     steps:
-      - uses: actions/checkout@v4
+      # 1. Checkout repository
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
 
-      - name: Set up Java version
+      # 2. Set up Java JDK 8
+      - name: Set up Java JDK
         uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
           java-version: '8'
-          distribution: 'microsoft'
+          cache: 'maven'
 
+      # 3. Clean and build ROOT.war using Maven
       - name: Build with Maven
-        run: mvn clean install
+        run: mvn clean package -DskipTests
 
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: java-app
-          path: '${{ github.workspace }}/target/*.war'
+      # 4. Zip target/ROOT.war into deploy.zip for OneDeploy API compatibility
+      - name: Prepare Deployment Package
+        run: |
+          zip deploy.zip target/ROOT.war
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build 
-    
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: java-app
-      
+      # 5. Deploy to Azure App Service
       - name: Deploy to Azure Web App
-        id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'expleooooo'
           slot-name: 'Production'
-          package: '*.war'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_130FE9E909534CD7A7F39758BC93F29E }}
+          package: 'deploy.zip'
+          target-path: 'webapps'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_407E13E2C9944DC99FACC404B2A51631 }}
