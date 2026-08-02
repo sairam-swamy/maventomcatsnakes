@@ -113,4 +113,4 @@ jobs:
           slot-name: 'Production'
           package: 'deploy.zip'
           target-path: 'webapps'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_407E13E2C9944DC99FACC404B2A51631 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_130FE9E909534CD7A7F39758BC93F29E }}
